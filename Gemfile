@@ -9,6 +9,7 @@ source 'https://rubygems.org'
 # Authentication
 
 # Misc
+gem 'parallel'
 
 # State machines
 
