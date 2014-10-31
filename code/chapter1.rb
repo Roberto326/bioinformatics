@@ -4,6 +4,12 @@ require 'thread'
 class Chapter1
 
   BASES = ['A','C','G','T']
+  COMPLEMENTS = {
+    'A' => 'T',
+    'C' => 'G',
+    'G' => 'C',
+    'T' => 'A'
+  }
 
   @frequent_base_arrays = {}
   @frequent_base_maps = {}
@@ -59,8 +65,9 @@ class Chapter1
     fba = frequency_base_array(k)
     patterns = []
     for i in 0..(text.length - k)
-      pattern = text[i,k]
-      patterns << {kmer:pattern, index:pattern_to_number(pattern), count:1}
+      pattern   = text[i,k]
+      index     = pattern_to_number(pattern)
+      patterns << {kmer:pattern, index:index, count:1}
     end
     patterns
   end
@@ -91,41 +98,46 @@ class Chapter1
     frequent_patterns
   end
 
-  def self.compute_patterns_mismatch(text, k, d)
-    fba = frequency_base_array(k)
-    patterns = []
-    for i in 0..(text.length - k)
+
+  def self.frequent_words_mismatch(text, k, d, reverse=false)
+
+    neighborhoods = []
+    for i in 0..(text.length-k)
       pattern = text[i,k]
-      all_neighbors = neighbors(pattern, d)
-
-      all_neighbors.each do |neighbor|
-        patterns << {kmer:neighbor, index:pattern_to_number(neighbor), count:1}
-      end
+      neighborhoods += neighbors(pattern, d)
     end
-    patterns
-  end
 
-  def self.frequent_words_mismatch(text, k, d)
-    frequent_patterns = []
-    patterns = compute_patterns_mismatch(text, k, d)
+    patterns = []
+    for i in 0..(neighborhoods.length-1)
+      pattern   = neighborhoods[i]
+      pattern_r = reverse_complement(pattern)
+      index = pattern_to_number(pattern)
+      patterns << {kmer:pattern, index:index, count:1}
+      patterns << {kmer:pattern_r, index:pattern_to_number(pattern_r), count:1} if reverse
+    end
 
     # Sort by index
     patterns.sort_by!{|hsh| hsh[:index]}
 
     # Count
+    counts = {}
     for i in 1..(patterns.length-1)
       if patterns[i][:index] == patterns[i-1][:index]
         patterns[i][:count] = patterns[i-1][:count] + 1
+
+        counts[patterns[i][:kmer]] = patterns[i][:count]
+      else
+        counts[patterns[i][:kmer]] = 1
       end
     end
 
-    max = patterns.max_by{|hsh| hsh[:count]}[:count]
+    # Calculate Max
+    max = counts.max_by{|k,v| v}[1]
 
-    for i in 0..(patterns.length - 1)
-      if patterns[i][:count] == max
-        pattern = number_to_pattern(patterns[i][:index], k)
-        frequent_patterns << pattern
-      end
+    frequent_patterns = []
+
+    counts.each do |k,v|
+      frequent_patterns << k if v == max
     end
 
     frequent_patterns
@@ -188,6 +200,7 @@ class Chapter1
         changes.each do |change|
           new_chars[pos] = change
           new_pattern = new_chars.join
+
           patterns << new_pattern
 
           if d > 0
@@ -200,6 +213,10 @@ class Chapter1
     end
 
     patterns.uniq
+  end
+
+  def self.reverse_complement(text)
+    text.split('').reverse.map{|c| COMPLEMENTS[c] }.join
   end
 
 
