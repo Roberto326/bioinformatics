@@ -131,13 +131,17 @@ class Chapter1
       end
     end
 
-    # Calculate Max
+    # Calculate Max. Has to be greater than 1
     max = counts.max_by{|k,v| v}[1]
+    max = 2 if max < 2
 
     frequent_patterns = []
 
     counts.each do |k,v|
-      frequent_patterns << k if v == max
+      if v == max
+        frequent_patterns << k
+        puts "#{k} = #{v}"
+      end
     end
 
     frequent_patterns
@@ -157,6 +161,37 @@ class Chapter1
       skew_array << skew
     end
     skew_array
+  end
+
+  def self.skew_file(source, target, skip=1)
+    genome = read_fasta(source)
+    puts 'file read'
+    skew_array = skew(genome)
+    File.open(target, 'w') do |file|
+      skew_array.each_with_index do |v,index|
+        file.puts "#{index},#{v}" if index % skip == 0
+      end
+    end
+    nil
+  end
+
+  def self.get_window(genome,o,l, target)
+    text = genome[o,l]
+    File.open(target, 'w') do |file|
+      file.write text
+    end
+    nil
+  end
+
+  def self.read_fasta(filename)
+    text = ''
+    f = File.open(filename,'r')
+    f.each_line do |line|
+      next if line[0,1] == '>'
+      text += line.chomp
+    end
+    f.close
+    text
   end
 
   def self.all_min(skew_array)
