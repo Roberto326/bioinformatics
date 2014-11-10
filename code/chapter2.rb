@@ -169,6 +169,14 @@ class Chapter2
     peptide.inject(:+)
   end
 
+  def self.peptide_masses(peptide)
+    res = []
+    for i in 0..(peptide.length-1)
+      res << MASS[peptide[i,1]]
+    end
+    res
+  end
+
   def self.cyclo_spectrum_dumb(peptide)
     masses = []
     sub_p = sub_peptides(peptide)
@@ -181,8 +189,8 @@ class Chapter2
   def self.linear_spectrum(peptide)
     prefix_mass = [0]
     for i in 0..(peptide.length-1)
-      amino_acid = peptide[i,1]
-      prefix_mass[i+1] = prefix_mass[i] + MASS[amino_acid]
+      amino_acid_mass = peptide.is_a?(String) ? MASS[peptide[i,1]] : peptide[i]
+      prefix_mass[i+1] = prefix_mass[i] + amino_acid_mass
     end
     linear_spectrum = [0]
     for i in 0..(peptide.length-1)
@@ -208,7 +216,7 @@ class Chapter2
         cyclic_spectrum << peptide_mass - diff_mass if i > 0 && j < peptide.length
       end
     end
-      cyclic_spectrum.sort()
+    cyclic_spectrum.sort()
   end
 
   def self.peptide_count(mass)
@@ -295,5 +303,98 @@ class Chapter2
   def self.map_count(arr)
     Hash[arr.sort.chunk{|i| i}.map{|k,v| [k,v.count]}]
   end
+
+  def self.score_peptide(peptide, spectrum)
+    t_spectrum = cyclo_spectrum(peptide)
+    t_s_count = map_count(t_spectrum)
+    x_s_count = map_count(spectrum)
+
+    score = 0
+    t_s_count.each do |k,v|
+      ct = x_s_count[k]
+      if ct
+        shared_masses = ct < v ? ct : v
+        score += shared_masses
+      end
+    end
+    score
+  end
+
+  def self.linear_score_peptide(peptide, spectrum)
+    t_spectrum = linear_spectrum(peptide)
+    t_s_count = map_count(t_spectrum)
+    x_s_count = map_count(spectrum)
+
+    score = 0
+    t_s_count.each do |k,v|
+      ct = x_s_count[k]
+      if ct
+        shared_masses = ct < v ? ct : v
+        score += shared_masses
+      end
+    end
+    score
+  end
+
+  def self.leaderboard_trim(peptides, spectrum, n)
+    leaderboard = []
+    peptides.each do |peptide|
+      leaderboard << {peptide:peptide, score:linear_score_peptide(peptide, spectrum)}
+    end
+
+    return peptides if leaderboard.count < n
+
+    leaderboard.sort_by!{|i| -i[:score]}
+    ct = 0
+    lcut = leaderboard[n-1][:score]
+    leaderboard.delete_if do |l|
+      delete = (ct >= n) && (l[:score] < lcut)
+      ct += 1
+      delete
+    end
+    results = leaderboard.map{|i| i[:peptide] }
+    puts "#{peptides.count} ->  #{results.count}"
+    results
+  end
+
+  def self.leaderboard_cyclo_peptide_sequencing(spectrum, n)
+    peptides = [[]]
+    leader_peptide = []
+    lps = 0
+    pam = parent_mass(spectrum)
+
+    while !peptides.empty? do
+
+      #Branch
+      peptides = expand(peptides, spectrum)
+
+      # Bound
+      peptides.delete_if do |peptide|
+        delete = false
+
+        pm  = peptide_mass_i(peptide)
+
+        if pm == pam
+          score = linear_score_peptide(peptide,spectrum)
+          if score > lps
+            puts " #{score}"
+            leader_peptide = peptide
+            lps = score
+          end
+
+        elsif pm > pam
+          delete = true
+        end
+
+        delete
+      end
+
+      #Trim
+      peptides = leaderboard_trim(peptides, spectrum, n)
+
+    end
+    leader_peptide
+  end
+
 
 end
