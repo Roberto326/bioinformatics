@@ -231,7 +231,7 @@ class Chapter2
     spectrum.last
   end
 
-  def self.cyclo_peptide_sequencing(spectrum)
+  def self.cyclopeptide_sequencing(spectrum)
     results = []
     peptides = (spectrum & Chapter2::MASS_ONLY).map{|aa| [aa]}
 
@@ -264,8 +264,10 @@ class Chapter2
   end
 
   def self.expand(peptides, spectrum)
+    spectrum ||= MASS_ONLY
+
     ppts = []
-    MASS_ONLY.each do |mass|
+    spectrum.each do |mass|
 
       if peptides.empty?
         ppts << [mass]
@@ -280,20 +282,22 @@ class Chapter2
     ppts
   end
 
-  def self.consistent(peptide, spectrum)
+  def self.consistent(peptide, spectrum, with_subs=false)
     mc_peptide  = map_count(peptide)
     mc_spectrum = map_count(spectrum)
     mc_peptide.each do |k,v|
       return false if mc_spectrum[k].nil? || mc_spectrum[k] < v
     end
 
-    # subs = sub_peptides(peptide)
-    # subs << peptide
-    # subs.uniq.each do |s_p|
-    #   unless spectrum.include?(peptide_mass_i(s_p))
-    #     return false
-    #   end
-    # end
+    if with_subs
+      subs = sub_peptides(peptide)
+      subs << peptide
+      subs.uniq.each do |s_p|
+        unless spectrum.include?(peptide_mass_i(s_p))
+          return false
+        end
+      end
+    end
 
     return false unless spectrum.include?(peptide_mass_i(peptide))
 
@@ -348,53 +352,107 @@ class Chapter2
     ct = 0
     lcut = leaderboard[n-1][:score]
     leaderboard.delete_if do |l|
-      delete = (ct >= n) && (l[:score] < lcut)
+      del_p = (ct >= n) && (l[:score] < lcut)
       ct += 1
-      delete
+      del_p
+
     end
     results = leaderboard.map{|i| i[:peptide] }
-    puts "#{peptides.count} ->  #{results.count}"
+    puts "Trim #{peptides.count} ->  #{results.count}"
     results
   end
 
-  def self.leaderboard_cyclo_peptide_sequencing(spectrum, n)
-    peptides = [[]]
+  def self.leaderboard_cyclopeptide_sequencing(spectrum, n, alphabet=nil, highest=nil)
+
+    leaderboard = [[]]
     leader_peptide = []
-    lps = 0
     pam = parent_mass(spectrum)
 
-    while !peptides.empty? do
+    while !leaderboard.empty? do
 
       #Branch
-      peptides = expand(peptides, spectrum)
+      leaderboard = expand(leaderboard, alphabet)
+      puts "Begin - Leaderboard count => #{leaderboard.count}"
 
       # Bound
-      peptides.delete_if do |peptide|
-        delete = false
+      leaderboard.delete_if do |peptide|
+        del_peptide = false
 
         pm  = peptide_mass_i(peptide)
 
         if pm == pam
-          score = linear_score_peptide(peptide,spectrum)
-          if score > lps
-            puts " #{score}"
+          puts "Mass equal -> #{peptide.join('-')}   :   #{score_peptide(peptide,spectrum)}   :   #{score_peptide(leader_peptide,spectrum)}"
+          if score_peptide(peptide,spectrum) > score_peptide(leader_peptide,spectrum)
             leader_peptide = peptide
-            lps = score
+          end
+
+          if highest
+            highest << peptide
           end
 
         elsif pm > pam
-          delete = true
+          del_peptide = true
         end
 
-        delete
+        del_peptide
       end
 
+      puts "Before Trim - Leaderboard count => #{leaderboard.count}"
+
       #Trim
-      peptides = leaderboard_trim(peptides, spectrum, n)
+      leaderboard = leaderboard_trim(leaderboard, spectrum, n)
 
     end
+    # [leader_peptide, xx]
     leader_peptide
   end
 
+  def self.convolution(spectrum)
+    cnv = []
+    for i in 0..(spectrum.length-1)
+      for j in 0..(spectrum.length-1)
+        diff = spectrum[i] - spectrum[j]
+        cnv << diff if diff > 0
+      end
+    end
+    cnv
+  end
+
+  def self.convolution_cyclopeptide_sequencing(m, n, spectrum, highest=nil)
+    spectrum.sort!
+
+    cs = convolution(spectrum)
+
+    # remove everything outside 57 : 200
+    cs.delete_if{|mass| mass < 57 || mass > 200}
+
+    # Create map: mass -> multiplicity
+    csm = map_count(cs)
+
+    # Sort by multiplicity (descending)
+    csm = csm.sort_by{|k,v| -v}.map{|k,v| {mass:k, multiplicity:v}}
+
+    # Keep on top M masses (with ties)
+    ncut = csm[m-1][:multiplicity]
+    ct = 0
+    csm.delete_if do |mass|
+      delete = ct >= m && mass[:multiplicity] < ncut
+      ct += 1
+      delete
+    end
+
+    alphabet = []
+    csm.each do |mass|
+      alphabet << mass[:mass]
+    end
+    alphabet.sort
+
+
+    leaderboard_cyclopeptide_sequencing(spectrum, n, alphabet, highest)
+  end
+
+  def self.spectrum(st, delimiter=' ')
+    st.split(delimiter).map{|c| c.to_i}
+  end
 
 end
